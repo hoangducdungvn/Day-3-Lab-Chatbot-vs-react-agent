@@ -1,5 +1,6 @@
 import os
 import re
+import time
 from typing import List, Dict, Any, Optional
 from src.core.llm_provider import LLMProvider
 from src.telemetry.logger import logger
@@ -36,6 +37,7 @@ class ReActAgent:
         2. DO NOT output the "Observation:" line. The system will run the tool and provide the observation to you.
         3. Once you have enough information from the observations, output:
         Final Answer: your final response.
+        4. Nếu Observation có chữ 'Thành công...', BẮT BUỘC KHÔNG gọi tool nữa và phải dùng Final Answer.
         """
 
     def run(self, user_input: str) -> str:
@@ -109,6 +111,7 @@ class ReActAgent:
                 })
                 current_prompt += f"\nObservation: {error_msg} (Attempt {consecutive_errors}/3)"
             
+            time.sleep(2.5)
             steps += 1
             
         logger.log_event("AGENT_END", {"steps": steps})
@@ -139,3 +142,54 @@ class ReActAgent:
                 else:
                     return f"Executed {tool_name} with args: {args}"
         return f"Tool {tool_name} not found."
+
+    def run_with_trace(self, user_input: str) -> dict:
+        """
+        Runs the ReAct loop and returns a dict with 'final_answer' and 'traces' for UI display.
+        """
+        current_prompt = user_input
+        steps = 0
+        consecutive_errors = 0
+        traces = []
+
+        while steps < self.max_steps:
+            result = self.llm.generate(current_prompt, system_prompt=self.get_system_prompt())
+            content = result.get("content", "")
+            
+            thought_match = re.search(r"Thought:\s*(.*?)(?=Action:|Final Answer:|$)", content, re.DOTALL)
+            thought = thought_match.group(1).strip() if thought_match else ""
+            
+            current_trace = {"thought": thought, "action": "", "observation": ""}
+            current_prompt += f"\n{content}"
+            
+            final_answer_match = re.search(r"Final Answer:\s*(.*)", content, re.DOTALL)
+            if final_answer_match:
+                return {"final_answer": final_answer_match.group(1).strip(), "traces": traces}
+            
+            action_match = re.search(r"Action:\s*([a-zA-Z0-9_]+)\((.*?)\)", content)
+            if action_match:
+                tool_name = action_match.group(1)
+                args = action_match.group(2)
+                observation = self._execute_tool(tool_name, args)
+                consecutive_errors = 0
+                
+                current_trace["action"] = f"{tool_name}({args})"
+                current_trace["observation"] = str(observation)
+                traces.append(current_trace)
+                
+                current_prompt += f"\nObservation: {observation}"
+            else:
+                consecutive_errors += 1
+                error_msg = "Could not parse Action or Final Answer."
+                if consecutive_errors >= 3:
+                    return {"final_answer": "Failed to parse after 3 attempts.", "traces": traces}
+                
+                current_trace["action"] = "ERROR"
+                current_trace["observation"] = error_msg
+                traces.append(current_trace)
+                current_prompt += f"\nObservation: {error_msg} (Attempt {consecutive_errors}/3)"
+            
+            time.sleep(2.5)
+            steps += 1
+            
+        return {"final_answer": "Max steps reached.", "traces": traces}

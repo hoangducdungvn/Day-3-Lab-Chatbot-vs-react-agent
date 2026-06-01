@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Music Agent - Baseline vs ReAct</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --primary: #3b82f6;
+            --primary-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --message-bot-bg: rgba(51, 65, 85, 0.8);
+            --message-user-bg: var(--primary-gradient);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            color: var(--text-main);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .chat-container {
+            width: 100%;
+            max-width: 900px;
+            height: 90vh;
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* HEADER */
+        .header {
+            padding: 24px;
+            border-bottom: 1px solid var(--glass-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: var(--primary-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* TOGGLE */
+        .mode-toggle {
+            display: flex;
+            background: rgba(15, 23, 42, 0.6);
+            border-radius: 12px;
+            padding: 4px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .mode-btn {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-weight: 500;
+            font-size: 0.9rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .mode-btn.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text-main);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* CHAT AREA */
+        .chat-area {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .message {
+            max-width: 80%;
+            padding: 16px 20px;
+            border-radius: 16px;
+            font-size: 0.95rem;
+            line-height: 1.5;
+            animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--message-user-bg);
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.3);
+        }
+
+        .message.bot {
+            align-self: flex-start;
+            background: var(--message-bot-bg);
+            border: 1px solid var(--glass-border);
+            border-bottom-left-radius: 4px;
+        }
+
+        .thought-process {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            background: rgba(0,0,0,0.2);
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border-left: 3px solid var(--primary);
+            font-family: monospace;
+        }
+
+        .tool-call {
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        @keyframes popIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* INPUT AREA */
+        .input-area {
+            padding: 24px;
+            border-top: 1px solid var(--glass-border);
+            background: rgba(15, 23, 42, 0.4);
+            display: flex;
+            gap: 12px;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            padding: 16px 20px;
+            border-radius: 12px;
+            color: var(--text-main);
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+        }
+
+        .chat-input:focus {
+            border-color: var(--primary);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .chat-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .send-btn {
+            background: var(--primary-gradient);
+            border: none;
+            width: 54px;
+            border-radius: 12px;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+        }
+
+        .send-btn svg {
+            width: 24px;
+            height: 24px;
+            fill: white;
+        }
+
+        /* SCROLLBAR */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chat-container">
+        <!-- Header & Toggle -->
+        <div class="header">
+            <h1>AI Music Studio <span id="current-mode-text" style="font-weight: 300; font-size: 1rem; color: var(--text-muted);">| ReAct Agent Mode</span></h1>
+            <div class="mode-toggle">
+                <button class="mode-btn" id="btn-baseline" onclick="setMode('baseline')">Chatbot Baseline</button>
+                <button class="mode-btn active" id="btn-agent" onclick="setMode('agent')">ReAct Agent</button>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="chat-area" id="chat-area">
+            <div class="message bot">
+                Hello! I am your intelligent Music Generator Agent. Try asking me: <em>"Hãy làm cho tôi một đoạn nhạc lofi dài 8 bars, nhịp điệu chậm rãi 80 BPM, tone C."</em>
+            </div>
+        </div>
+
+        <!-- Input -->
+        <div class="input-area">
+            <input type="text" id="user-input" class="chat-input" placeholder="Type your music request here..." onkeypress="handleEnter(event)">
+            <button class="send-btn" onclick="sendMessage()">
+                <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        let currentMode = 'agent';
+
+        function setMode(mode) {
+            currentMode = mode;
+            document.getElementById('btn-baseline').classList.remove('active');
+            document.getElementById('btn-agent').classList.remove('active');
+            document.getElementById('btn-' + mode).classList.add('active');
+            
+            const modeText = mode === 'agent' ? '| ReAct Agent Mode' : '| Chatbot Baseline Mode';
+            document.getElementById('current-mode-text').innerText = modeText;
+
+            // Clear chat to restart
+            document.getElementById('chat-area').innerHTML = `
+                <div class="message bot">
+                    Switched to <strong>${mode === 'agent' ? 'ReAct Agent' : 'Chatbot Baseline'}</strong>. Try asking me a question!
+                </div>
+            `;
+        }
+
+        function appendMessage(content, sender, isHTML = false) {
+            const chatArea = document.getElementById('chat-area');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `message ${sender}`;
+            
+            if (isHTML) {
+                msgDiv.innerHTML = content;
+            } else {
+                msgDiv.innerText = content;
+            }
+
+            chatArea.appendChild(msgDiv);
+            chatArea.scrollTop = chatArea.scrollHeight;
+        }
+
+        function handleEnter(e) {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage() {
+            const inputEl = document.getElementById('user-input');
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            // 1. Show user message
+            appendMessage(text, 'user');
+            inputEl.value = '';
+
+            // 2. Show loading
+            const chatArea = document.getElementById('chat-area');
+            const loadingId = 'loading-' + Date.now();
+            const loadingHtml = `<div id="${loadingId}" class="message bot" style="opacity: 0.7;">Thinking...</div>`;
+            chatArea.insertAdjacentHTML('beforeend', loadingHtml);
+            chatArea.scrollTop = chatArea.scrollHeight;
+
+            try {
+                // 3. Call Real Backend API
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        message: text,
+                        mode: currentMode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove loading
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) loadingEl.remove();
+
+                if (data.error) {
+                    appendMessage("Error: " + data.error, 'bot');
+                    return;
+                }
+
+                if (currentMode === 'baseline') {
+                    // Baseline response
+                    appendMessage(data.final_answer || "Tôi đã tổng hợp xong đoạn nhạc lofi cho bạn rồi nhé. (Ảo giác: Không có file nào được tạo do không có tool!)", 'bot');
+                } else {
+                    // Agent: Construct UI from Python traces
+                    let traceHtml = '';
+                    if (data.traces && data.traces.length > 0) {
+                        traceHtml += '<div class="thought-process">';
+                        for (let step of data.traces) {
+                            if (step.thought) {
+                                traceHtml += `<div><span style="color: #94a3b8;">Thought:</span> ${step.thought}</div>`;
+                            }
+                            if (step.action) {
+                                traceHtml += `<div><span style="color: #94a3b8;">Action:</span> <span class="tool-call">${step.action}</span></div>`;
+                            }
+                            if (step.observation) {
+                                traceHtml += `<div><span style="color: #10b981;">Observation:</span> ${step.observation}</div><br>`;
+                            }
+                        }
+                        traceHtml += '</div>';
+                    }
+                    traceHtml += `<div>${data.final_answer || "Đã hoàn thành yêu cầu tạo nhạc."}</div>`;
+                    
+                    appendMessage(traceHtml, 'bot', true);
+                }
+            } catch (err) {
+                const loadingEl = document.getElementById(loadingId);
+                if (loadingEl) loadingEl.remove();
+                appendMessage("Failed to connect to backend: Make sure you ran 'python server.py'", 'bot');
+            }
+        }
+    </script>
+</body>
+</html>

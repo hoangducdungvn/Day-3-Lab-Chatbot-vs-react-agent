@@ -20,7 +20,7 @@ def get_provider(provider_name: str):
 
 def main():
     parser = argparse.ArgumentParser(description="Run Baseline Chatbot (No Tools)")
-    parser.add_argument("--provider", type=str, default="openai", choices=["openai", "gemini", "local"], help="LLM Provider to use")
+    parser.add_argument("--provider", type=str, default="local", choices=["openai", "gemini", "local"], help="LLM Provider to use")
     args = parser.parse_args()
 
     load_dotenv(override=True)
@@ -36,13 +36,13 @@ def main():
         print(f"Lỗi khởi tạo provider: {e}")
         return
 
-    # A complex multi-step query that requires real-world data
-    query = "I want to buy an iPhone and a Macbook. Please check their stock and calculate the total items available."
+    # A complex multi-step query that requires real-world data and local file creation
+    query = "Hãy làm cho tôi một đoạn nhạc lofi dài 8 bars, nhịp điệu chậm rãi 80 BPM, tone C."
     
     print(f"\nUser: {query}\n")
     logger.info(f"=== BẮT ĐẦU CHẠY CHATBOT ({args.provider.upper()}) ===")
     
-    system_prompt = "You are a helpful e-commerce chatbot. Answer the user's questions to the best of your ability."
+    system_prompt = "You are a helpful AI Music Generator. Answer the user's questions to the best of your ability."
     
     try:
         result = provider.generate(query, system_prompt=system_prompt)
@@ -60,8 +60,8 @@ def main():
         
     print(f"\n=======================================================")
     print("NHẬN XÉT (Baseline Limitations):")
-    print("Chatbot không có khả năng truy cập Tool (cơ sở dữ liệu kho hàng).")
-    print("Do đó, nó bắt buộc phải trả lời chung chung hoặc 'ảo giác' (tự bịa ra số lượng).")
+    print("Chatbot không có khả năng gọi Tool nội bộ để tạo file MIDI hoặc WAV.")
+    print("Do đó, nó chỉ có thể sinh ra chữ (Text) mô tả nốt nhạc, không thể tạo ra file .wav thật.")
     print("Đây chính là lý do chúng ta cần đến ReAct Agent!")
 
 if __name__ == "__main__":

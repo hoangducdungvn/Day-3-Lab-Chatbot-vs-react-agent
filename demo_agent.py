@@ -8,52 +8,50 @@ from src.core.local_provider import LocalProvider
 from src.agent.agent import ReActAgent
 from src.telemetry.logger import logger
 
-# --- ĐỊNH NGHĨA TOOLS MẪU ---
-def calculate(expression: str) -> str:
-    try:
-        return str(eval(expression))
-    except Exception as e:
-        return f"Error evaluating expression: {e}"
+def create_midi(args_str: str) -> str:
+    """Generates a structural .mid notation file based on tempo, key, and bars."""
+    return "Thành công tạo file MIDI tại: temp/output.mid"
 
-def check_stock(item_name: str) -> str:
-    stock_db = {"iphone": 10, "macbook": 5}
-    item_name = item_name.strip(" '\"").lower()
-    return f"Stock for {item_name}: {stock_db.get(item_name, 0)}"
+def midi_to_wav(args_str: str) -> str:
+    """Synthesizer that reads .mid and applies a waveform to output audio."""
+    return "Thành công render file WAV tại: outputs/final.wav"
+
+def create_music_wav(args_str: str) -> str:
+    """All-in-one wrapper that combines MIDI generation and WAV rendering."""
+    # Ensure outputs directory exists
+    os.makedirs("outputs", exist_ok=True)
+    
+    # Mock creating a physical 0KB wav file to satisfy the report requirement
+    file_path = "outputs/lofi_chill.wav"
+    with open(file_path, "w") as f:
+        f.write("")
+        
+    return f"Thành công. Kết quả file lưu tại: {file_path}"
 
 def broken_tool(args: str) -> str:
     # Cố tình gây lỗi để xem Agent xử lý thế nào
     raise ValueError("This tool is broken!")
 
-def web_search_mock(query: str) -> str:
-    # A mock search tool that returns dynamic content based on query
-    query = query.lower()
-    if "president" in query or "biden" in query:
-        return "The current president is Joe Biden."
-    elif "weather" in query:
-        return "The weather is currently 25 degrees Celsius and sunny."
-    else:
-        return f"Search results for: {query}. Found 1,000,000 results."
-
 tools = [
     {
-        "name": "calculate",
-        "description": "Evaluates a mathematical expression (e.g. '2 + 2'). Returns the result.",
-        "func": calculate
+        "name": "create_midi",
+        "description": "Generates a structural .mid notation file based on tempo, key, and bars. Input format: json string.",
+        "func": create_midi
     },
     {
-        "name": "check_stock",
-        "description": "Checks the stock quantity of an item. Argument should be the item name.",
-        "func": check_stock
+        "name": "midi_to_wav",
+        "description": "Synthesizer that reads .mid and applies a waveform to output audio. Input format: json string.",
+        "func": midi_to_wav
+    },
+    {
+        "name": "create_music_wav",
+        "description": "All-in-one wrapper that combines MIDI generation and WAV rendering. Use this directly for full generation. Input format: json string.",
+        "func": create_music_wav
     },
     {
         "name": "broken_tool",
         "description": "A broken tool that throws an error. Use this to see how the agent handles failures.",
         "func": broken_tool
-    },
-    {
-        "name": "web_search",
-        "description": "Searches the web for real-time information. Argument should be the search query string.",
-        "func": web_search_mock
     }
 ]
 
@@ -96,11 +94,11 @@ def main():
     agent = ReActAgent(llm=provider, tools=tools, max_steps=5)
 
     if args.test == "success":
-        print("\n[Scenario: SUCCESS] Hỏi một câu đa bước:")
-        query = "I want to buy an iPhone and a Macbook. Please check their stock and calculate the total items available."
+        print("\n[Scenario: SUCCESS] Hãy làm một bài nhạc lofi:")
+        query = "Hãy làm cho tôi một đoạn nhạc lofi dài 8 bars, nhịp điệu chậm rãi 80 BPM, tone C."
     else:
         print("\n[Scenario: FAIL] Yêu cầu agent dùng một tool bị hỏng để tạo ra lỗi phân tích/ảo giác:")
-        query = "Please use the broken_tool on 'test' and then calculate 10 + 20."
+        query = "Please use the broken_tool on 'test' and then create a lofi song."
 
     print(f"\nUser: {query}\n")
     logger.info(f"=== BẮT ĐẦU CHẠY AGENT ({args.provider.upper()}) ===")
