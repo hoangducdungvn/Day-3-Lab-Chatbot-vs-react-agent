@@ -18,7 +18,7 @@ class ReActAgent:
 
     def get_system_prompt(self) -> str:
         """
-        TODO: Implement the system prompt that instructs the agent to follow ReAct.
+        Implement the system prompt that instructs the agent to follow ReAct.
         Should include:
         1.  Available tools and their descriptions.
         2.  Format instructions: Thought, Action, Observation.
@@ -27,18 +27,20 @@ class ReActAgent:
         return f"""
         You are an intelligent assistant. You have access to the following tools:
         {tool_descriptions}
-
         Use the following format:
         Thought: your line of reasoning.
         Action: tool_name(arguments)
-        Observation: result of the tool call.
-        ... (repeat Thought/Action/Observation if needed)
+        
+        CRITICAL RULES:
+        1. You must ONLY output ONE Thought and ONE Action per response.
+        2. DO NOT output the "Observation:" line. The system will run the tool and provide the observation to you.
+        3. Once you have enough information from the observations, output:
         Final Answer: your final response.
         """
 
     def run(self, user_input: str) -> str:
         """
-        TODO: Implement the ReAct loop logic.
+        Implement the ReAct loop logic.
         1. Generate Thought + Action.
         2. Parse Action and execute Tool.
         3. Append Observation to prompt and repeat until Final Answer.
@@ -47,21 +49,70 @@ class ReActAgent:
         
         current_prompt = user_input
         steps = 0
+        consecutive_errors = 0
 
         while steps < self.max_steps:
-            # TODO: Generate LLM response
-            # result = self.llm.generate(current_prompt, system_prompt=self.get_system_prompt())
+            # Generate LLM response
+            result = self.llm.generate(current_prompt, system_prompt=self.get_system_prompt())
+            content = result.get("content", "")
             
-            # TODO: Parse Thought/Action from result
+            # Log raw LLM response & metrics
+            logger.log_event("LLM_METRIC", {
+                "step": steps + 1,
+                "content": content,
+                "usage": result.get("usage", {}),
+                "latency_ms": result.get("latency_ms", 0)
+            })
             
-            # TODO: If Action found -> Call tool -> Append Observation
+            current_prompt += f"\n{content}"
             
-            # TODO: If Final Answer found -> Break loop
+            # If Final Answer found -> Break loop
+            final_answer_match = re.search(r"Final Answer:\s*(.*)", content, re.DOTALL)
+            if final_answer_match:
+                final_answer = final_answer_match.group(1).strip()
+                logger.log_event("AGENT_END", {"steps": steps + 1, "final_answer": final_answer})
+                return final_answer
+            
+            # If Action found -> Call tool -> Append Observation
+            action_match = re.search(r"Action:\s*([a-zA-Z0-9_]+)\((.*?)\)", content)
+            if action_match:
+                tool_name = action_match.group(1)
+                args = action_match.group(2)
+                observation = self._execute_tool(tool_name, args)
+                consecutive_errors = 0 # Reset error count on successful action parse
+                
+                # Log tool execution and result
+                logger.log_event("TOOL_EXECUTION", {
+                    "step": steps + 1,
+                    "tool": tool_name,
+                    "args": args,
+                    "observation": observation
+                })
+                
+                current_prompt += f"\nObservation: {observation}"
+            else:
+                consecutive_errors += 1
+                error_msg = "Could not parse Action or Final Answer. Please use the correct format."
+                
+                # Sophisticated Retry Guardrail
+                if consecutive_errors >= 3:
+                    fallback_msg = "Agent failed to parse correctly after 3 attempts. Aborting to save tokens."
+                    logger.log_event("AGENT_CRASH", {"reason": "Too many parsing errors"})
+                    return fallback_msg
+                
+                # Log parsing/hallucination error
+                logger.log_event("PARSING_ERROR", {
+                    "step": steps + 1,
+                    "content": content,
+                    "error": error_msg,
+                    "retry_count": consecutive_errors
+                })
+                current_prompt += f"\nObservation: {error_msg} (Attempt {consecutive_errors}/3)"
             
             steps += 1
             
         logger.log_event("AGENT_END", {"steps": steps})
-        return "Not implemented. Fill in the TODOs!"
+        return "Max steps reached without finding a final answer."
 
     def _execute_tool(self, tool_name: str, args: str) -> str:
         """
@@ -69,6 +120,22 @@ class ReActAgent:
         """
         for tool in self.tools:
             if tool['name'] == tool_name:
-                # TODO: Implement dynamic function calling or simple if/else
-                return f"Result of {tool_name}"
+                if 'func' in tool and callable(tool['func']):
+                    try:
+                        import ast
+                        try:
+                            parsed_args = ast.literal_eval(f"({args})")
+                            if isinstance(parsed_args, tuple):
+                                return str(tool['func'](*parsed_args))
+                            elif isinstance(parsed_args, dict):
+                                return str(tool['func'](**parsed_args))
+                            else:
+                                return str(tool['func'](parsed_args))
+                        except (SyntaxError, ValueError):
+                            # Fallback: pass raw string
+                            return str(tool['func'](args))
+                    except Exception as e:
+                        return f"Error executing tool {tool_name}: {e}"
+                else:
+                    return f"Executed {tool_name} with args: {args}"
         return f"Tool {tool_name} not found."
